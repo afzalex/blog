@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import AuthorAvatar from "../../components/AuthorAvatar.astro";
 import PostCard from "../../components/PostCard.astro";
 import { SITE, authors, postsByAuthor } from "../../lib/blog-data.js";
 
@@ -22,7 +23,12 @@ const list = await postsByAuthor(author.slug);
     <Breadcrumbs items={[{ label: "Home", to: "/" }, { label: "Authors" }, { label: author.name }]} />
 
     <header class="mt-8 flex flex-col items-start gap-6 border-b border-border pb-10 sm:flex-row sm:items-center">
-      <img src={author.avatar} alt="" width="96" height="96" class="h-24 w-24 rounded-full" />
+      <AuthorAvatar
+        src={author.avatar}
+        alt={author.name}
+        size={96}
+        class="h-24 w-24 rounded-full object-cover"
+      />
       <div>
         <div class="text-xs font-medium uppercase tracking-[0.2em] text-primary">Author</div>
         <h1 class="mt-2 font-serif text-4xl font-semibold tracking-tight">{author.name}</h1>

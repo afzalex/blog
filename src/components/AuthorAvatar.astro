@@ -1,0 +1,39 @@
+---
+import { Image } from "astro:assets";
+
+const {
+  src,
+  alt = "",
+  size = 48,
+  class: className = "",
+} = Astro.props;
+
+const isLocalImage = typeof src !== "string";
+const widths = [size, size * 2];
+---
+
+{
+  isLocalImage ? (
+    <Image
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      widths={widths}
+      sizes={`${size}px`}
+      format="webp"
+      loading="lazy"
+      class={className}
+    />
+  ) : (
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      class={className}
+    />
+  )
+}

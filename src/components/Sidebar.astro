@@ -1,5 +1,6 @@
 ---
 import Icon from "./Icon.astro";
+import AuthorAvatar from "./AuthorAvatar.astro";
 import PostCard from "./PostCard.astro";
 import Newsletter from "./Newsletter.astro";
 import { categories, tags, popularPosts, sortedPosts, authors } from "../lib/blog-data.js";
@@ -12,7 +13,7 @@ const author = authors[0];
 <aside class="space-y-10">
   <div>
     <div class="flex items-center gap-3">
-      <img src={author.avatar} alt="" width="40" height="40" class="h-10 w-10 rounded-full" />
+      <AuthorAvatar src={author.avatar} size={40} class="h-10 w-10 rounded-full object-cover" />
       <div>
         <div class="text-sm font-medium">{author.name}</div>
         <div class="text-xs text-muted-foreground">Editor</div>
