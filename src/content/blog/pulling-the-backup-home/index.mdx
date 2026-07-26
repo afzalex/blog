@@ -1,0 +1,156 @@
+---
+title: "Pulling the backup home"
+excerpt: "What I learned while replacing a server-driven push with an automatic Ubuntu-to-Mac pull, and the small details that made it reliable."
+date: 2026-07-25
+readingTime: 6
+category: "engineering"
+tags: ["tools", "process"]
+author: "mohammad-afzal"
+thumbnail: ./cover.webp
+featured: true
+---
+
+My Ubuntu server already had a working backup routine. `lsyncd` watched a directory and used `rsync` to push changes to my Mac. It was fast, incremental, and mostly invisible.
+
+Still, I wanted to reverse the responsibility.
+
+Instead of asking the server to find the Mac and send data to it, I wanted the Mac to decide when to retrieve the backup. The data would continue moving in the same direction—from Ubuntu to macOS—but the destination would initiate the transfer.
+
+That small change led to several useful lessons about `rsync`, permissions, automation, and what the word "backup" really means.
+
+## Push and pull are about who starts the conversation
+
+My original push command ran on Ubuntu:
+
+```bash
+rsync -av --progress \
+  /path/to/backups/ \
+  user@mac.local:/path/to/mac-backup/
+```
+
+The equivalent pull command runs on the Mac:
+
+```bash
+rsync -av --progress \
+  user@server.local:/path/to/backups/ \
+  /path/to/mac-backup/
+```
+
+The source and destination are unchanged. Only the machine initiating the SSH connection is different.
+
+A push arrangement is useful when the server detects changes and should send them immediately. A pull arrangement gives the receiving machine more control: the Mac owns the schedule, the destination, and the decision to connect.
+
+There is also a small but important detail in both commands: the trailing slash after the source directory. With it, `rsync` copies the directory's contents. Without it, `rsync` may create another copy of the source directory inside the destination.
+
+## A permission error is still a permission error
+
+My first dry run successfully generated the file list, then reported:
+
+```text
+opendir ".../gitea/.../ssh" failed: Permission denied
+rsync error: some files/attrs were not transferred (code 23)
+```
+
+At first, it was tempting to associate the error with the new pull arrangement. Running the original push again revealed the same failure.
+
+That was the useful finding: transfer direction was irrelevant. In both cases, `rsync` examined the Ubuntu source as the same user, and that user could not read one directory.
+
+Exit code 23 means the transfer was partial. Many files may have copied successfully, but at least one file or directory was skipped. A backup process should never quietly treat that result as complete.
+
+There are two sensible responses. If the directory belongs in the backup, grant the backup user narrowly scoped read and traversal access. If it is intentionally restricted or backed up separately, exclude it explicitly:
+
+```bash
+--exclude='gitea/gitea/ssh/'
+```
+
+An explicit exclusion documents the omission. Ignoring a permission error does not.
+
+## Turning the pull into a background job
+
+A command that works only when I remember to run it is not yet a backup routine. On macOS, the native tool for this kind of recurring user task is `launchd`.
+
+I placed the pull inside a small shell script using:
+
+```bash
+rsync \
+  -a \
+  --partial \
+  --human-readable \
+  --stats \
+  --exclude='gitea/gitea/ssh/' \
+  -e "ssh -o BatchMode=yes -o ConnectTimeout=30" \
+  user@server.local:/path/to/backups/ \
+  /path/to/mac-backup/
+```
+
+Archive mode preserves the usual directory structure and metadata. `--partial` keeps partially transferred data so an interrupted copy does not necessarily need to restart from zero. `BatchMode=yes` prevents a background job from waiting forever for an SSH password or confirmation prompt.
+
+The LaunchAgent has two scheduling instructions:
+
+```xml
+<key>RunAtLoad</key>
+<true/>
+
+<key>StartInterval</key>
+<integer>3600</integer>
+```
+
+It starts when the agent is loaded after login and runs approximately once per hour. If the Mac is asleep or powered off, it cannot receive a backup; it resumes when the machine is available again.
+
+The job also uses low-priority disk I/O so that a routine backup is less likely to interfere with normal work.
+
+## Logs are part of the backup
+
+The script appends each run to a log, including its start time, transfer statistics, and final exit code.
+
+That final number matters:
+
+```text
+Finished with exit code 0
+```
+
+An hourly schedule only proves that a command was launched every hour. It does not prove that the backup succeeded. Recording the exit code makes the difference visible.
+
+I encountered an unexpectedly specific shell problem while adding this logging. In `zsh`, `status` is a special read-only variable. This failed:
+
+```zsh
+status=$?
+```
+
+Renaming it fixed the script:
+
+```zsh
+rsync_exit=$?
+echo "Finished with exit code $rsync_exit"
+exit "$rsync_exit"
+```
+
+The transfer itself had completed; the reporting code was what failed. Small operational scripts deserve the same testing as larger programs.
+
+## An updated copy is not version history
+
+My pull deliberately does not use `--delete`.
+
+This means a file removed from the Ubuntu source is not automatically removed from the Mac. That choice protects the destination from accidental source-side deletion, but it also means the Mac directory is not an exact mirror.
+
+Changed files are still replaced by their newer versions. The arrangement therefore does not preserve a historical copy of every version from yesterday or last week.
+
+What I built is an automatically refreshed secondary copy. It protects against losing access to the server and gives me another copy of its backed-up data. It is not a complete versioned-backup system.
+
+That distinction is worth stating plainly. Synchronization, replication, snapshots, and versioned backups solve related but different problems.
+
+## The quiet test of automation
+
+The final setup is intentionally ordinary:
+
+- Ubuntu remains the source of the data.
+- The Mac pulls updates once per hour.
+- SSH keys allow unattended authentication.
+- Interrupted transfers can continue.
+- A restricted directory is excluded explicitly.
+- Destination-only files are never automatically deleted.
+- Every run records whether it actually succeeded.
+
+The most important result is not the command itself. It is that the process no longer depends on memory.
+
+A backup becomes useful when it continues to happen on the days when I am busy, distracted, or convinced that I will run it later.

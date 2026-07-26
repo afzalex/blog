@@ -1,0 +1,228 @@
+---
+title: "Running split DNS at home with dnsmasq"
+excerpt: "How to resolve the same hostname locally at home and through a public route outside, using dnsmasq on a Raspberry Pi."
+date: 2026-07-26
+readingTime: 7
+category: "engineering"
+tags: ["tools", "web", "process"]
+author: "mohammad-afzal"
+thumbnail: ./cover.webp
+---
+
+I run several services on my home network. Traefik routes each hostname to the correct container, while Cloudflare Tunnel makes selected services available when I am away from home.
+
+I want to use the same hostname in both places:
+
+- at home, the hostname should resolve to the server's private IP address;
+- outside, public DNS should send the connection through Cloudflare.
+
+This arrangement is called **split DNS** or **split-horizon DNS**. The DNS answer changes according to where the query originates:
+
+```text
+Inside the LAN
+Laptop → dnsmasq → private IP → Traefik → service
+
+Outside the LAN
+Client → public DNS → Cloudflare → tunnel → service
+```
+
+Local traffic takes the shortest path, while the public route continues to work without a second bookmark or hostname.
+
+## Install dnsmasq
+
+[dnsmasq](https://dnsmasq.org/docs/dnsmasq-man.html) is a lightweight DNS forwarder and cache that works comfortably on a Raspberry Pi.
+
+On a Debian or Ubuntu-based server:
+
+```bash
+sudo apt update
+sudo apt install dnsmasq
+```
+
+Before configuring it, find the interface that serves the LAN:
+
+```bash
+ip -br address
+```
+
+The examples below use `wlan0`. A wired server may use a name such as `eth0` or `enp2s0`.
+
+## A compact configuration
+
+Create a file such as:
+
+```text
+/etc/dnsmasq.d/lan.conf
+```
+
+Here is one practical example with three different kinds of local DNS rule:
+
+```ini
+# Accept DNS requests from the LAN, but not through loopback
+interface=wlan0
+except-interface=lo
+bind-dynamic
+
+# Use only explicitly configured upstream resolvers
+no-resolv
+server=1.1.1.1
+server=9.9.9.9
+
+# Keep frequently used answers in memory
+cache-size=10000
+
+# 1. Public hostname that should use a private address inside the LAN
+address=/git.example.com/192.168.1.10
+local=/git.example.com/
+
+# 2. Hostname that exists only on the home network
+address=/photos.home.arpa/192.168.1.20
+local=/photos.home.arpa/
+
+# 3. Send an entire private zone to another DNS server
+server=/lab.home.arpa/192.168.1.53
+```
+
+Replace the interface names, addresses, and domains with values from the network being configured. `example.com` is used here as a placeholder; a real split-DNS hostname should be under a domain you control. `home.arpa` is the special-use domain intended for names inside home networks.
+
+## What the important lines mean
+
+### Control where dnsmasq listens
+
+```ini
+interface=wlan0
+except-interface=lo
+bind-dynamic
+```
+
+`interface=wlan0` accepts queries on the Wi-Fi LAN interface. More than one `interface=` line can be added if the resolver must serve multiple networks.
+
+When `interface=` is used, dnsmasq normally includes loopback automatically. `except-interface=lo` overrides that behavior. It is useful when another local resolver owns port 53, but it also means software on the server cannot reach this dnsmasq instance through `127.0.0.1`.
+
+`bind-dynamic` binds to addresses on the selected interfaces and notices matching interfaces or addresses that appear later. It is particularly useful with dynamic Linux interfaces.
+
+### Choose the upstream resolvers
+
+```ini
+no-resolv
+server=1.1.1.1
+server=9.9.9.9
+```
+
+`no-resolv` prevents dnsmasq from reading upstream nameservers from `/etc/resolv.conf`. The `server=` lines become the complete upstream list for ordinary internet queries.
+
+The second server is not necessarily a passive backup. By default, dnsmasq observes which upstream servers respond well and chooses between them. `strict-order` can force the listed order, although most home networks do not need it.
+
+Never configure an upstream router to forward back to the same dnsmasq instance. That creates a DNS loop.
+
+### Cache answers
+
+```ini
+cache-size=10000
+```
+
+dnsmasq caches frequently requested answers in memory, reducing repeated upstream lookups. It still respects DNS expiry rules; increasing the cache does not make records permanent.
+
+### Override a hostname locally
+
+```ini
+address=/git.example.com/192.168.1.10
+local=/git.example.com/
+```
+
+`address=` returns the chosen private IP address. Inside the LAN, `git.example.com` now reaches the local reverse proxy. Outside the LAN, public DNS remains unchanged and can return a Cloudflare address.
+
+The companion `local=` rule prevents other record types for this hostname from being forwarded upstream. This is important for IPv6 and is easy to miss.
+
+### Create a LAN-only name
+
+```ini
+address=/photos.home.arpa/192.168.1.20
+local=/photos.home.arpa/
+```
+
+This follows the same pattern, but the name is intended only for the home network. The `local=` rule ensures that unanswered record types do not leave the LAN.
+
+### Delegate a private zone
+
+```ini
+server=/lab.home.arpa/192.168.1.53
+```
+
+This form of `server=` is domain-specific. Queries for `lab.home.arpa` and its subdomains go to `192.168.1.53`; unrelated queries continue to use the ordinary upstream resolvers.
+
+## Why `address=` and `local=` belong together
+
+My first split-DNS rule appeared to work because an A-record test returned the correct private IPv4 address. Browsers were less consistent: one reached Traefik locally, while another sometimes reached Cloudflare and displayed its public certificate.
+
+The certificate was a symptom, not the cause.
+
+Since dnsmasq 2.86, an IPv4 `address=` rule answers A queries locally, but queries for other record types can still be forwarded upstream. An AAAA query may therefore receive a public IPv6 address. A browser can prefer that address and take the public route.
+
+This rule is incomplete for an IPv4-only local service:
+
+```ini
+address=/git.example.com/192.168.1.10
+```
+
+This pair keeps all queries for the hostname local:
+
+```ini
+address=/git.example.com/192.168.1.10
+local=/git.example.com/
+```
+
+The A query receives the private IPv4 address. The AAAA query receives no address unless a local IPv6 address is explicitly configured.
+
+## Validate and test
+
+Check the syntax before restarting the service:
+
+```bash
+sudo dnsmasq --test
+sudo systemctl restart dnsmasq
+systemctl status dnsmasq --no-pager
+```
+
+From another device on the LAN, query dnsmasq directly:
+
+```bash
+dig +short @192.168.1.10 git.example.com A
+dig +short @192.168.1.10 git.example.com AAAA
+dig +short @192.168.1.10 example.org A
+```
+
+For the example configuration, the first query should return `192.168.1.10`, the second should return no address, and the third should return an ordinary public answer.
+
+When a reverse proxy terminates TLS, its certificate can be checked without relying on browser DNS or caches:
+
+```bash
+openssl s_client \
+  -connect 192.168.1.10:443 \
+  -servername git.example.com \
+  </dev/null 2>/dev/null |
+openssl x509 -noout -subject -issuer -ext subjectAltName
+```
+
+If this direct test shows the expected certificate but a browser shows the public provider's certificate, inspect the remote IP address before changing Traefik. The browser may simply be reaching the public endpoint.
+
+## Make clients use the local resolver
+
+A correct server configuration helps only when LAN devices actually query it. The router's DHCP settings should advertise the dnsmasq address as the network's DNS server.
+
+Avoid advertising a public resolver as a secondary DNS server. Clients may use any resolver they receive rather than waiting for the first one to fail, making split DNS unpredictable.
+
+IPv6 needs the same attention. Routers can advertise DNS servers through IPv6 Router Advertisement or DHCPv6. Those resolvers must also preserve the local DNS path.
+
+A browser configured with a custom DNS-over-HTTPS provider can bypass the operating system's resolver. On devices that need split DNS, use the system resolver or configure Secure DNS so that local names are not sent directly to a public provider.
+
+After changing DNS settings on macOS, cached answers can be cleared with:
+
+```bash
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder
+```
+
+At home, the hostname should now resolve to the private address and connect directly to Traefik. Outside the network, public DNS and Cloudflare continue to provide the external route.
+
+The most useful lesson from this setup is simple: when a browser presents an unexpected certificate, check which IP address it reached. DNS may have chosen a different path long before TLS entered the picture.

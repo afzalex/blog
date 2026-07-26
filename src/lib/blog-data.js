@@ -8,6 +8,14 @@ const siteUrl = (
 
 export const authors = [
   {
+    slug: "mohammad-afzal",
+    name: "Mohammad Afzal",
+    bio: "Senior Staff Engineer writing about cloud systems, automation, product engineering, and the practical work of building reliable software.",
+    longBio:
+      "Mohammad Afzal is a Senior Staff Engineer with more than a decade of experience building and modernizing cloud-native systems across banking, insurance, SaaS, and product platforms. He works across Java, Spring Boot, AWS, Kubernetes, DevOps, and applied AI, and writes about engineering decisions, automation, and lessons from running systems in practice.",
+    avatar: "https://github.com/afzalex.png",
+  },
+  {
     slug: "elena-march",
     name: "Elena March",
     bio: "Writer & editor covering design, craft, and slow technology.",
@@ -107,7 +115,7 @@ export const formatDate = (iso) =>
   });
 
 export const SITE = {
-  name: "Quiet Pages",
+  name: "Afzal, In Plain Text",
   description:
     "An independent magazine on writing, design, and the slow web. Published occasionally, read closely.",
   url: siteUrl,
