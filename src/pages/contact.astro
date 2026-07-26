@@ -3,6 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Breadcrumbs from "../components/Breadcrumbs.astro";
 import Icon from "../components/Icon.astro";
 import { SITE } from "../lib/blog-data.js";
+import { CONTACT } from "../lib/contact-config.js";
 ---
 
 <BaseLayout
@@ -22,30 +23,79 @@ import { SITE } from "../lib/blog-data.js";
     </header>
 
     <div class="mt-12 grid gap-12 lg:grid-cols-[1fr_240px]">
-      <form data-contact-form class="space-y-5">
+      <form
+        action={CONTACT.endpoint}
+        method="post"
+        data-contact-form
+        class="space-y-5"
+      >
         <div>
           <label for="name" class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Name</label>
-          <input id="name" required class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary" />
+          <input
+            id="name"
+            name="name"
+            autocomplete="name"
+            maxlength="100"
+            required
+            class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary"
+          />
         </div>
         <div>
           <label for="email" class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</label>
-          <input id="email" type="email" required class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary" />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            maxlength="254"
+            required
+            class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary"
+          />
         </div>
         <div>
           <label for="message" class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Message</label>
-          <textarea id="message" required rows="6" class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary"></textarea>
+          <textarea
+            id="message"
+            name="message"
+            maxlength="5000"
+            required
+            rows="6"
+            class="mt-2 w-full border-0 border-b border-input bg-transparent py-2 text-base outline-none focus:border-primary"></textarea>
         </div>
-        <button type="submit" class="rounded-md bg-foreground px-6 py-2.5 text-sm font-medium text-background hover:opacity-90">
+
+        <div
+          id="contact-turnstile"
+          class="cf-turnstile"
+          data-contact-turnstile
+          data-sitekey={CONTACT.turnstileSiteKey}
+          data-action={CONTACT.action}
+        ></div>
+
+        <button
+          type="submit"
+          data-contact-submit
+          class="rounded-md bg-foreground px-6 py-2.5 text-sm font-medium text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
           Send
         </button>
-        <p data-contact-sent class="text-sm text-primary" role="status" hidden>Thanks &mdash; we'll be in touch.</p>
+        <p
+          data-contact-status
+          class="text-sm text-primary"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
       </form>
 
       <aside class="space-y-6 border-l border-border pl-8 lg:block">
         <div>
           <div class="text-xs font-medium uppercase tracking-wider text-muted-foreground">Elsewhere</div>
           <ul class="mt-3 space-y-3 text-sm">
-            <li><a href="mailto:hello@example.com" class="flex items-center gap-2 hover:text-primary"><Icon name="mail" class="h-3.5 w-3.5" /> hello@example.com</a></li>
+            <li>
+              <a href={`mailto:${CONTACT.email}`} class="flex items-center gap-2 hover:text-primary">
+                <Icon name="mail" class="h-3.5 w-3.5" /> {CONTACT.email}
+              </a>
+            </li>
             <li><a href="https://x.com/quietpages" class="flex items-center gap-2 hover:text-primary"><Icon name="twitter" class="h-3.5 w-3.5" /> @quietpages</a></li>
             <li><a href="/rss.xml" class="flex items-center gap-2 hover:text-primary"><Icon name="rss" class="h-3.5 w-3.5" /> RSS feed</a></li>
           </ul>
@@ -59,12 +109,131 @@ import { SITE } from "../lib/blog-data.js";
   </div>
 </BaseLayout>
 
+<script is:inline>
+  window.onContactTurnstileReady = function () {
+    window.dispatchEvent(new Event("contact-turnstile-ready"));
+  };
+</script>
+<script
+  is:inline
+  src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onContactTurnstileReady&render=explicit"
+  async
+  defer
+></script>
+
 <script>
-  const contactForm = document.querySelector("[data-contact-form]");
-  contactForm?.addEventListener("submit", (event) => {
+  type TurnstileApi = {
+    render: (
+      container: HTMLElement,
+      options: {
+        sitekey: string;
+        action: string;
+        size: string;
+        theme: string;
+        "error-callback": () => void;
+        "expired-callback": () => void;
+      },
+    ) => string;
+    reset: (widgetId: string) => void;
+  };
+
+  const contactWindow = window as typeof window & {
+    turnstile?: TurnstileApi;
+    contactTurnstileWidgetId?: string;
+  };
+  const contactForm = document.querySelector<HTMLFormElement>("[data-contact-form]");
+  const submitButton = document.querySelector<HTMLButtonElement>("[data-contact-submit]");
+  const statusMessage = document.querySelector<HTMLElement>("[data-contact-status]");
+  const turnstileContainer = document.querySelector<HTMLElement>(
+    "[data-contact-turnstile]",
+  );
+
+  const showStatus = (message: string) => {
+    if (!statusMessage) return;
+    statusMessage.textContent = message;
+    statusMessage.hidden = false;
+  };
+
+  const renderTurnstile = () => {
+    if (
+      !contactWindow.turnstile ||
+      !turnstileContainer ||
+      contactWindow.contactTurnstileWidgetId
+    ) {
+      return;
+    }
+
+    const sitekey = turnstileContainer.dataset.sitekey;
+    const action = turnstileContainer.dataset.action;
+    if (!sitekey || !action) return;
+
+    contactWindow.contactTurnstileWidgetId = contactWindow.turnstile.render(
+      turnstileContainer,
+      {
+        sitekey,
+        action,
+        size: "flexible",
+        theme: "auto",
+        "error-callback": () => {
+          showStatus("The security check could not load. Please refresh and try again.");
+        },
+        "expired-callback": () => {
+          showStatus("The security check expired. Please complete it again.");
+        },
+      },
+    );
+  };
+
+  window.addEventListener("contact-turnstile-ready", renderTurnstile);
+  renderTurnstile();
+
+  contactForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    contactForm.reset();
-    const sent = document.querySelector("[data-contact-sent]");
-    if (sent) sent.hidden = false;
+    if (!submitButton) return;
+
+    const formData = new FormData(contactForm);
+    const token = formData.get("cf-turnstile-response");
+    if (typeof token !== "string" || !token) {
+      showStatus("Please complete the security check.");
+      return;
+    }
+
+    submitButton.disabled = true;
+    submitButton.textContent = "Sending…";
+    if (statusMessage) statusMessage.hidden = true;
+
+    try {
+      const result = await fetch(contactForm.action, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body: formData,
+      });
+      const payload = await result.json().catch(() => null);
+
+      if (!result.ok) {
+        throw new Error(payload?.message || "The message could not be sent.");
+      }
+
+      contactForm.reset();
+      showStatus(payload?.message || "Thanks — your message has been sent.");
+    } catch (error) {
+      showStatus(
+        error instanceof Error
+          ? error.message
+          : "The message could not be sent. Please try again.",
+      );
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "Send";
+
+      if (
+        contactWindow.turnstile &&
+        contactWindow.contactTurnstileWidgetId
+      ) {
+        contactWindow.turnstile.reset(
+          contactWindow.contactTurnstileWidgetId,
+        );
+      }
+    }
   });
 </script>
