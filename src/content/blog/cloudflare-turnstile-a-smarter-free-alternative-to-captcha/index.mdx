@@ -6,7 +6,7 @@ readingTime: 8
 category: "engineering"
 tags: ["tools", "web", "process"]
 author: "mohammad-afzal"
-thumbnail: ./turnstile-success.png
+thumbnail: ./banner.png
 ---
 
 CAPTCHAs are supposed to separate legitimate visitors from automated abuse. Too often, they also make legitimate visitors stop, squint at a grid of images, and prove that a corner of a traffic light counts as a traffic light.
@@ -208,10 +208,11 @@ This was expected. The browser had received a token, but the production backend 
 
 The useful distinction is:
 
-```text
-Widget success means the browser obtained a token.
-Application success means the backend verified and consumed it.
-```
+- Widget success means the browser obtained a token.
+- Application success means the backend verified and consumed it.
+
+
+![Turnstile widget showing a successful browser-side check on localhost.](./turnstile-success.png)
 
 For automated tests, Cloudflare provides dedicated test keys. For manual production validation, I tested the complete flow from the deployed hostname instead of weakening production hostname checks.
 

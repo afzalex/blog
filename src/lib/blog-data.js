@@ -118,6 +118,6 @@ export const formatDate = (iso) =>
 export const SITE = {
   name: "Afzal, In Plain Text",
   description:
-    "An independent magazine on writing, design, and the slow web. Published occasionally, read closely.",
+    "Practical notes on software engineering, cloud infrastructure, automation, and building reliable systems.",
   url: siteUrl,
 };

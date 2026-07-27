@@ -2,6 +2,8 @@
 const { compact = false } = Astro.props;
 ---
 
+<!-- TODO: Implement Newsletter -->
+<div class="hidden">
 {
   compact ? (
     <div>
@@ -46,7 +48,7 @@ const { compact = false } = Astro.props;
     </section>
   )
 }
-
+</div>
 <script>
   document.addEventListener("submit", (event) => {
     const form = event.target;
