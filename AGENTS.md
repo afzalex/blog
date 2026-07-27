@@ -1,241 +1,324 @@
-# Instructions for Astro Theme Development
+# Repository instructions for coding agents
 
-These instructions apply to all Astro theme work. Prioritize clean, reusable, accessible, fast, SEO-friendly code. Treat the theme as something that may be reused across multiple websites, not as a one-off implementation.
+## Scope
 
-## General Principles
+These instructions apply to the entire repository.
 
-* Prefer simple, maintainable Astro components over unnecessary abstractions.
-* Keep the default Astro advantage: mostly static HTML, minimal JavaScript, and hydration only where needed.
-* Do not add client-side JavaScript unless there is a clear user-facing reason.
-* Avoid unnecessary dependencies. Before adding a package, check whether the same result can be achieved with Astro, HTML, CSS, or a small utility.
-* Keep components reusable, documented, and easy to override.
-* Use TypeScript where helpful, especially for props, content schemas, config objects, and reusable utilities.
-* Favor progressive enhancement. The site should remain usable even if JavaScript fails.
-* Keep markup clean, semantic, and easy to crawl.
-* Never solve layout or behavior problems in a way that harms accessibility, SEO, or performance.
-* Follow README layout as here https://github.com/andreialba/maria must include the title, preview image with a link to the preview URL, those cards with versions, preview link, short description of the theme, list of features, and how to set things up.
-* Add MIT license under Andrei Alba
+This is the source for **Afzal, In Plain Text**, Mohammad Afzal's personal
+engineering blog at `https://blog.afzalex.com`. It is an Astro 6 static site,
+not a generic demo theme. Optimize changes for this publication and preserve
+its existing design, content, metadata, and deployment behavior.
 
-## Astro-Specific Guidelines
+## Working agreement
 
-* Use `.astro` components for static and content-focused UI.
-* Use islands/client hydration only when interactivity is required.
-* Avoid `client:load` unless the component truly needs to run immediately.
-* Prefer `client:visible`, `client:idle`, or no hydration when possible.
-* Keep layout components responsible for page structure, shared metadata, global slots, and theme-level wrappers.
-* Keep UI components small and focused.
-* Use `Astro.props` with typed props where possible.
-* Use content collections for structured content like posts, pages, projects, docs, testimonials, FAQs, and changelogs.
-* Validate frontmatter with schemas instead of relying on loose optional fields.
-* Keep route structure clean and predictable.
-* Do not hardcode production URLs inside components. Use site config, constants, or environment-aware helpers.
-* Make sure the theme works with a configurable `site` value in `astro.config.*`.
+- Tell the user what files and behavior you intend to change before modifying
+  the repository.
+- Inspect the relevant files before proposing or implementing a change.
+- Do not deploy, publish, commit, push, open a pull request, or change external
+  services unless the user explicitly asks.
+- Preserve unrelated user changes in a dirty worktree.
+- Keep requested edits narrowly scoped. Do not bundle cleanup, content
+  rewrites, dependency upgrades, or visual redesigns into an unrelated task.
+- Use `rg` and `rg --files` for repository searches.
+- Use `apply_patch` for manual source edits.
+- Never expose credentials, private tokens, Turnstile secrets, SMTP
+  credentials, or private email-routing details in source, logs, screenshots,
+  documentation, or responses.
 
-## Accessibility Requirements
+## Project overview
 
-* Use semantic HTML first. Do not use ARIA when a native HTML element solves the problem.
-* Use landmarks properly: `header`, `nav`, `main`, `section`, `article`, `aside`, and `footer` where appropriate.
-* Each page should have one clear `h1`.
-* Preserve logical heading order. Do not skip heading levels for visual styling.
-* All interactive elements must be keyboard accessible.
-* Use real buttons for actions and real links for navigation.
-* Every form control must have an associated label.
-* Inputs, errors, help text, and validation states must be understandable to screen readers.
-* Add visible focus styles. Never remove outlines without replacing them with an accessible focus state.
-* Provide a skip link for keyboard users when the layout has repeated navigation.
-* Use descriptive link text. Avoid vague text like “click here” or “read more” without context.
-* Images must have useful `alt` text when meaningful.
-* Decorative images should use empty alt text.
-* Icons used as buttons or links must have accessible names.
-* Ensure sufficient color contrast for text, icons, borders, and states.
-* Do not rely on color alone to communicate meaning.
-* Respect `prefers-reduced-motion`.
-* Avoid auto-playing motion, carousels, or animations unless they are user-controlled and accessible.
-* Modals, menus, accordions, tabs, dropdowns, and mobile navigation must handle focus, keyboard interaction, and escape/close behavior correctly.
-* Test important templates with keyboard navigation and screen reader-friendly markup in mind.
+- Framework: Astro 6
+- Styling: Tailwind CSS 4 through `@tailwindcss/vite`, plus global CSS
+- Content: MDX in an Astro content collection
+- Output: static files in `dist/`
+- Package manager: npm with a committed `package-lock.json`
+- CI runtime: Node.js 24
+- Production host: GitHub Pages
+- Domain: `blog.afzalex.com`
+- Contact processing: Cloudflare Turnstile plus a separate Cloudflare Worker
 
-## SEO Requirements
+The site intentionally uses mostly static HTML. Client-side JavaScript exists
+only for focused interactions such as search, filters, pagination, dark mode,
+reading progress, copy buttons, navigation panels, and the contact form.
 
-* Every page should have a unique, descriptive `<title>`.
-* Every indexable page should have a useful meta description.
-* Use a reusable SEO or Head component for metadata.
-* Include canonical URLs where appropriate.
-* Support Open Graph metadata for social sharing.
-* Support Twitter/X card metadata where appropriate.
-* Use absolute URLs for canonical and social image URLs.
-* Configure `site` in `astro.config.*` so canonical URLs and sitemap generation work correctly.
-* Include sitemap support for production themes.
-* Include sensible robots handling.
-* Avoid duplicate metadata across pages.
-* Avoid duplicate content caused by inconsistent trailing slashes, canonical paths, or pagination.
-* Use clean, descriptive URLs.
-* Add structured data where useful, such as `WebSite`, `Organization`, `Article`, `BreadcrumbList`, `Product`, `FAQPage`, or `LocalBusiness`, depending on the theme.
-* Do not add fake schema data. Structured data must match visible page content.
-* Use proper heading structure to reflect the content hierarchy.
-* Ensure important content is present in the HTML, not hidden behind client-only rendering.
-* Use descriptive image filenames where possible.
-* Add alt text and dimensions for content images.
-* Include pagination metadata where relevant.
-* Support multilingual SEO only when the theme actually supports multiple languages. If it does, include proper `lang`, canonical, and alternate/hreflang handling.
-* Keep internal links crawlable with real `<a href="">` links.
-* Avoid JavaScript-only navigation for normal pages.
+## Repository map
 
-## Performance Requirements
+- `src/content/blog/<slug>/index.mdx`
+  - article body and frontmatter
+  - the containing folder becomes the route slug
+- `src/content.config.js`
+  - authoritative article schema
+- `src/lib/blog-data.js`
+  - site metadata, authors, categories, tags, sorting, featured article,
+    related articles, and adjacent navigation
+- `src/lib/contact-config.js`
+  - public contact-form configuration only
+- `src/pages/`
+  - page routes plus RSS, sitemap, and robots endpoints
+- `src/pages/blog/[slug].astro`
+  - article rendering, metadata, table of contents, sharing, reading progress,
+    code-copy controls, related posts, and adjacent navigation
+- `src/layouts/BaseLayout.astro`
+  - shared document structure, canonical links, Open Graph, Twitter cards,
+    JSON-LD, fonts, header, and footer
+- `src/components/`
+  - reusable Astro components
+- `src/styles.css`
+  - Tailwind import, design tokens, global styles, and prose styles
+- `public/CNAME`
+  - production custom domain
+- `.github/workflows/deploy.yml`
+  - GitHub Pages deployment from `main`
+- `.gitea/workflows/test.yml`
+  - build validation for pushes and pull requests
 
-* Keep JavaScript minimal.
-* Avoid shipping framework runtime code unless needed.
-* Hydrate components selectively.
-* Prefer static rendering where possible.
-* Avoid large global scripts.
-* Avoid large CSS bundles.
-* Keep CSS scoped, layered, or organized in a predictable way.
-* Remove unused CSS and unused components.
-* Optimize images with Astro’s image tools where appropriate.
-* Always include image width and height to reduce layout shift.
-* Use responsive images for large visual assets.
-* Lazy-load below-the-fold images.
-* Do not lazy-load critical above-the-fold hero images unless there is a good reason.
-* Use modern image formats when appropriate.
-* Avoid layout shifts from images, ads, embeds, cookie banners, and late-loading UI.
-* Keep third-party scripts optional and documented.
-* Load analytics, embeds, chat widgets, and marketing scripts only when explicitly enabled.
-* Avoid blocking render with unnecessary scripts or styles.
-* Keep Core Web Vitals in mind, especially LCP, CLS, and INP.
+## Commands
 
-## Font Optimization
+Use the locked dependency graph:
 
-* Prefer self-hosted fonts for production themes.
-* Use only the font families actually needed by the theme.
-* Include only the font weights and styles actually used.
-* Prefer modern formats such as `woff2`.
-* Use `font-display: swap` or another intentional rendering strategy.
-* Preload only critical fonts used above the fold.
-* Do not preload every font file.
-* Define fallback font stacks that closely match the custom font metrics.
-* Avoid layout shift caused by late-loading fonts.
-* Do not load fonts from external providers by default unless the user explicitly chooses that option.
-* Keep font configuration centralized so users can replace or disable custom fonts easily.
+```bash
+npm ci
+```
 
-## CSS and Design System Guidelines
+Development:
 
-* Use design tokens or CSS custom properties for colors, spacing, typography, radii, shadows, and layout values.
-* Keep theme customization simple.
-* Avoid scattering hardcoded colors and spacing values throughout components.
-* Support light and dark modes only if the theme is designed for both.
-* Respect user system preference when dark mode is supported.
-* Ensure color tokens meet accessibility contrast requirements.
-* Keep responsive behavior consistent across components.
-* Use fluid and responsive typography where appropriate.
-* Avoid unnecessary wrappers and deeply nested markup.
-* Keep animations subtle, optional, and respectful of reduced-motion preferences.
+```bash
+npm run dev
+```
 
-## Content and Markdown Guidelines
+Production validation:
 
-* Content should be easy to manage through Markdown, MDX, or content collections.
-* Validate required frontmatter fields.
-* Provide sensible defaults for optional metadata.
-* Avoid requiring users to duplicate the same SEO fields in many places when defaults can be generated safely.
-* Support draft or unpublished content only when the theme explicitly needs it.
-* Make dates, authors, categories, tags, and excerpts consistent.
-* Make sure generated archive, tag, category, author, and pagination pages have useful metadata.
-* Avoid rendering empty UI sections when content is missing.
+```bash
+npm run build
+```
 
-## Image and Media Guidelines
+Production preview:
 
-* Use optimized local images where possible.
-* Provide responsive sizes for theme-controlled images.
-* Include `alt` text fields in content schemas where images are user-provided.
-* Do not use background images for meaningful content unless an accessible text alternative exists.
-* Avoid enormous default hero images.
-* Provide predictable aspect ratios to prevent layout shift.
-* Lazy-load media that is not immediately visible.
-* Make video/audio embeds accessible with labels, captions, transcripts, or surrounding explanatory content when relevant.
+```bash
+npm run preview
+```
 
-## Component Guidelines
+Formatting:
 
-* Components should have clear responsibilities.
-* Props should be typed and documented when not obvious.
-* Use sensible defaults.
-* Avoid components that silently fail or render broken markup when required props are missing.
-* Avoid coupling generic components to one specific page.
-* Keep class names predictable.
-* Make components easy to copy, remove, or override.
-* Do not introduce global side effects from small components.
-* For interactive components, document keyboard behavior and accessibility expectations.
+```bash
+npm run format
+```
 
-## Forms
+There is no lint script or automated test suite. Do not claim tests passed when
+only the build was run. For documentation-only changes, prefer:
 
-* Use semantic form markup.
-* Every input must have a label.
-* Required fields must be indicated accessibly.
-* Error messages must be connected to the relevant fields.
-* Success and error states should be announced or clearly visible.
-* Do not rely only on placeholder text as a label.
-* Use appropriate input types such as `email`, `tel`, `url`, `search`, and `number`.
-* Keep forms usable without unnecessary JavaScript where possible.
-* Do not include a form provider by default unless it is configurable.
+```bash
+npx prettier --check README.md AGENTS.md
+```
 
-## Navigation
+For source, configuration, content, or dependency changes, run at minimum:
 
-* Use real links for navigation.
-* Mark the current page or section when possible.
-* Ensure mobile navigation works with keyboard and screen readers.
-* Trap focus only when appropriate, such as inside an open modal menu.
-* Restore focus after closing menus or dialogs when relevant.
-* Make dropdowns and submenus accessible.
-* Do not hide navigation from assistive technology unless it is truly inactive.
+```bash
+npm run build
+```
 
-## Build, Config, and DX
+## Content rules
 
-* Keep configuration centralized and documented.
-* Provide clear theme constants for site name, default title, description, social links, navigation, and footer data.
-* Avoid requiring users to edit many files for common changes.
-* Use environment variables only where they are actually needed.
-* Do not expose secrets in client-side code.
-* Keep the README accurate.
-* Include setup, development, build, preview, customization, and deployment instructions.
-* Add comments only where they clarify non-obvious decisions.
-* Keep generated examples realistic and production-friendly.
-* Make sure the theme builds cleanly without warnings or broken links.
+The schema in `src/content.config.js` is authoritative. Every article requires:
 
-## Testing and QA Checklist
+- `title`
+- `excerpt`
+- `date`
+- positive integer `readingTime`
+- `category`
+- `author`
+- local `thumbnail`
 
-Before considering work complete, verify:
+`tags` defaults to an empty list. `updated`, `imageCredit`, and `featured` are
+optional.
 
-* The project builds successfully.
-* Pages render without console errors.
-* No unnecessary client JavaScript is shipped.
-* Navigation works with keyboard only.
-* Focus states are visible.
-* Forms have labels and accessible states.
-* Images have correct alt text and dimensions.
-* Metadata is present and unique per page.
-* Canonical URLs are correct.
-* Sitemap generation works.
-* Social preview metadata is valid.
-* The layout is responsive.
-* Dark mode works if supported.
-* Reduced motion is respected.
-* Lighthouse or similar checks do not reveal obvious accessibility, SEO, or performance issues.
-* There are no broken internal links.
-* There is no placeholder content left in production-facing defaults.
+When adding or editing an article:
 
-## Things to Avoid
+- Store it at `src/content/blog/<slug>/index.mdx`.
+- Keep article-specific images in the same folder.
+- Use a lowercase, stable, hyphenated slug.
+- Use an author, category, and tag slug already defined in
+  `src/lib/blog-data.js`, or update that central data intentionally.
+- Use `mohammad-afzal` for Afzal's first-person technical articles unless the
+  user specifies another author.
+- Keep excerpts concise and useful as metadata.
+- Use descriptive alt text for meaningful images.
+- Preserve image-credit data when the image still requires attribution.
+- Do not fabricate experience, quotations, results, dates, personal details,
+  or technical findings.
+- Do not silently rewrite existing articles or remove legacy sample content.
+- Avoid publishing credentials or account-specific secrets in screenshots and
+  code samples. Redact sensitive values while keeping tutorials useful.
+- Prefer one `featured: true` article at a time.
 
-* Do not use `<div>` and `<span>` for everything when semantic HTML exists.
-* Do not add ARIA roles to elements that already have correct native semantics.
-* Do not remove focus outlines without accessible replacements.
-* Do not add heavy animation libraries for simple transitions.
-* Do not add global JavaScript for isolated UI behavior.
-* Do not load all font weights “just in case.”
-* Do not load external fonts by default.
-* Do not use client-only rendering for content that should be crawlable.
-* Do not hide important content behind JavaScript.
-* Do not hardcode metadata across every page.
-* Do not ship large demo assets as required production assets.
-* Do not introduce dependencies without a clear reason.
-* Do not sacrifice accessibility for visual polish.
+The repository still contains legacy Quiet Pages sample authors and articles.
+They are existing content, not permission to invent more personal details or
+to delete them during unrelated work.
 
-## Preferred Outcome
+## Configuration rules
 
-The final Astro theme should be fast, accessible, SEO-ready, easy to customize, and pleasant to maintain. It should provide strong defaults while staying lightweight and flexible.
+### Site origin and base path
+
+Production builds must resolve canonical, feed, sitemap, robots, and social
+URLs to `https://blog.afzalex.com`.
+
+Relevant configuration is split between:
+
+- `astro.config.mjs`
+- `src/lib/blog-data.js`
+- `.github/workflows/deploy.yml`
+- `public/CNAME`
+
+If changing the production URL or base path, inspect and update every relevant
+location together. Prefer `SITE_URL` as the build-time source of truth.
+
+The fallback origins in `astro.config.mjs` and `src/lib/blog-data.js` are not
+currently identical. Do not introduce another fallback or depend on the
+difference. Set `SITE_URL` explicitly in production.
+
+### Contact form
+
+The contact page posts to a separate Cloudflare Worker. The public front-end
+configuration is in `src/lib/contact-config.js`.
+
+Preserve these security properties:
+
+- the browser requires a Turnstile token before sending;
+- the Worker must perform canonical server-side Siteverify validation;
+- the Worker must verify the expected hostname and action;
+- the action is currently `turnstile-spin-v2`;
+- form fields have length limits and must also be validated by the Worker;
+- the Worker, not this repository, stores `TURNSTILE_SECRET`;
+- secrets must never use a `PUBLIC_` environment variable;
+- CORS and allowed origins must remain restricted to intended site origins;
+- a successful browser widget alone must never be treated as authorization.
+
+Do not change the Worker endpoint, Turnstile site key, expected action, sender,
+or recipient assumptions without explaining the coordinated external change
+the user must make.
+
+### Disabled features
+
+- `src/components/Newsletter.astro` is deliberately wrapped in
+  `class="hidden"` and has no real subscription backend.
+- The comments placeholder in `src/pages/blog/[slug].astro` is deliberately
+  hidden and has no authentication or persistence backend.
+
+Do not expose either feature merely by removing `hidden`. Implement and verify
+a real backend, privacy behavior, error states, and abuse protection only when
+the user explicitly asks to enable the feature.
+
+## Astro and JavaScript conventions
+
+- Prefer `.astro` components and static rendering.
+- Do not introduce React, Vue, another UI runtime, or a new dependency when
+  Astro, HTML, CSS, or a small script is sufficient.
+- Keep client scripts local to the component or route that needs them.
+- Preserve progressive enhancement where practical.
+- Do not convert content that should be crawlable into client-only rendering.
+- Keep component responsibilities focused.
+- Use Astro's `Image` component or content image pipeline for local images.
+- Include dimensions or stable aspect ratios to prevent layout shift.
+- Do not add hydration directives without a concrete need.
+
+## Design and accessibility
+
+- Preserve the existing editorial visual language, typography, spacing, and
+  light/dark tokens unless redesign is the task.
+- Use semantic landmarks and native controls.
+- Maintain one clear `h1` per page and logical heading order.
+- Every form control needs a visible or accessible label.
+- Icon-only controls and links need descriptive accessible names.
+- Interactive elements must work with a keyboard and retain visible focus.
+- Search and mobile panels must continue to update `aria-expanded`, close with
+  Escape, and return focus appropriately.
+- Do not rely on color alone to convey state.
+- Respect `prefers-reduced-motion`.
+- Keep contrast readable in both light and dark themes.
+
+## SEO and generated-output invariants
+
+Preserve:
+
+- unique titles and descriptions;
+- canonical URLs;
+- Open Graph and Twitter card tags;
+- article `BlogPosting` JSON-LD;
+- person JSON-LD on the About page;
+- RSS at `/rss.xml`;
+- sitemap at `/sitemap.xml`;
+- robots.txt with the production sitemap URL;
+- crawlable category, tag, author, and article links.
+
+When changing routing, metadata, site origin, authors, categories, tags, or
+article slugs, inspect the feed, sitemap, robots, structured data, share URLs,
+redirect route, and internal links for downstream effects.
+
+`src/pages/blog/send-custom-domain-email-from-gmail-for-free.astro` preserves an
+older article URL. Do not remove it without checking inbound-link and redirect
+requirements.
+
+## Dependencies and generated files
+
+- Do not edit `node_modules/`, `.astro/`, or `dist/`.
+- Do not commit generated output unless the repository policy changes.
+- Use `npm install <package>` only when a dependency is genuinely required so
+  both `package.json` and `package-lock.json` stay synchronized.
+- Avoid dependency upgrades during unrelated work.
+- Keep the self-hosted fonts in `public/fonts/`; do not add external font
+  requests without explicit approval.
+- The package name, changelog, and MIT license still reflect the Quiet Pages
+  origin. Preserve the existing license and attribution unless the user asks
+  for a deliberate legal/packaging change.
+
+## Validation checklist
+
+Choose checks proportional to the change:
+
+### Documentation only
+
+- `npx prettier --check README.md AGENTS.md`
+- inspect Markdown links and commands against the current repository
+
+### Article or metadata changes
+
+- `npm run build`
+- confirm the expected route exists under `dist/`
+- inspect the article title, excerpt, author, date, image, table of contents,
+  related links, and social metadata
+
+### Layout, component, style, or client-script changes
+
+- `npm run build`
+- test affected pages at mobile and desktop widths
+- test keyboard interaction and visible focus
+- test both light and dark themes
+- check the browser console for errors
+
+### Contact-form changes
+
+- all layout/component checks above
+- valid Turnstile submission
+- missing, expired, and failed Turnstile states
+- Worker error response and network failure
+- button disabled/reset behavior
+- allowed production and local hostnames
+- no secret or token exposure
+
+### Deployment changes
+
+- verify the GitHub Pages artifact is still `dist`
+- verify `SITE_URL`, `PUBLIC_SITE_URL`, and `BASE_PATH`
+- verify `public/CNAME`
+- do not trigger deployment unless explicitly requested
+
+## Completion report
+
+When handing work back:
+
+- summarize the behavior changed;
+- list the files changed;
+- report the exact checks run and their outcomes;
+- call out checks not run;
+- mention any required external Cloudflare, DNS, GitHub Pages, or Worker step;
+- never describe an unverified or unperformed action as complete.
