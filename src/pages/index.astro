@@ -22,9 +22,10 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
 ---
 
 <BaseLayout
-  title={`${SITE.name} - Writing, design & the slow web`}
+  title={`${SITE.name} - Software engineering in practice`}
   description={SITE.description}
   canonical="/"
+  ogImage={homeHero}
   flushFooter
 >
   <section class="relative -mt-[calc(4rem+2px)] min-h-[calc(100svh-2rem)] overflow-hidden border-b border-border/60 pt-[calc(4rem+2px)] sm:min-h-[760px]">
@@ -58,14 +59,14 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
           <span class="italic text-white"> next</span>.
         </h1>
         <p class="mt-8 max-w-xl text-lg leading-relaxed text-white/86">
-          Essays, notes, and experiments from Afzal&mdash;written to clarify ideas, share discoveries, and document the journey.
+          Engineering notes and experiments from Afzal&mdash;written to clarify ideas, share discoveries, and document what works.
         </p>
         <div class="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
           <a
             href={`/blog/${featured.slug}`}
             class="group inline-flex items-center gap-2 border-b border-white pb-1 text-sm font-medium text-white hover:border-white/70 hover:text-white/82"
           >
-            Read the latest note
+            Read the latest article
             <Icon name="arrow-right" class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </a>
           <a href="/blog" class="text-sm text-white/76 hover:text-white">
@@ -133,7 +134,7 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
             <span>{featured.readingTime} min read</span>
           </div>
           <a href={`/blog/${featured.slug}`} class="mt-6 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-            Read the essay <Icon name="arrow-right" class="h-3.5 w-3.5" />
+            Read article <Icon name="arrow-right" class="h-3.5 w-3.5" />
           </a>
         </div>
       </article>
@@ -147,6 +148,7 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
         <button
           type="button"
           data-home-filter=""
+          aria-pressed="true"
           class="rounded-full border px-3 py-1 text-xs transition-colors border-foreground bg-foreground text-background"
         >
           All
@@ -156,6 +158,7 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
             <button
               type="button"
               data-home-filter={category.slug}
+              aria-pressed="false"
               class="rounded-full border px-3 py-1 text-xs transition-colors border-border text-muted-foreground hover:text-foreground"
             >
               {category.name}
@@ -193,6 +196,7 @@ const latest = (await sortedPosts()).filter((post) => post.slug !== featured.slu
     const inactiveClasses = ["border-border", "text-muted-foreground", "hover:text-foreground"];
 
     const setActive = (button, active) => {
+      button.setAttribute("aria-pressed", String(active));
       button.classList.toggle(activeClasses[0], active);
       button.classList.toggle(activeClasses[1], active);
       button.classList.toggle(activeClasses[2], active);

@@ -93,8 +93,8 @@ const iconClass = isHome
       <input
         data-search-input
         name="q"
-        aria-label="Search essays, field notes, interviews"
-        placeholder="Search essays, field notes, interviews..."
+        aria-label="Search articles"
+        placeholder="Search articles..."
         class="w-full border-0 bg-transparent py-2 font-serif text-lg outline-none placeholder:text-muted-foreground"
       />
     </form>
@@ -159,6 +159,10 @@ const iconClass = isHome
     const dark = document.documentElement.classList.contains("dark");
     moonIcon.hidden = dark;
     sunIcon.hidden = !dark;
+    themeToggle?.setAttribute(
+      "aria-label",
+      dark ? "Switch to light mode" : "Switch to dark mode",
+    );
   };
 
   setThemeIcon();
@@ -195,5 +199,10 @@ const iconClass = isHome
     document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("theme", next ? "dark" : "light");
     setThemeIcon();
+    window.dispatchEvent(
+      new CustomEvent("site-theme-change", {
+        detail: { theme: next ? "dark" : "light" },
+      }),
+    );
   });
 </script>

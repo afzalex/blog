@@ -30,6 +30,8 @@ articles, contact form, metadata, and deployment workflow.
 - A detailed About page for Mohammad Afzal
 - A contact form protected by Cloudflare Turnstile and submitted to a
   Cloudflare Worker
+- Self-hosted Remark42 comments with Google sign-in, replies, moderation, and
+  light/dark theme synchronization
 - RSS, XML sitemap, robots.txt, canonical URLs, Open Graph metadata, Twitter
   card metadata, and JSON-LD
 - Light and dark themes with a stored user preference
@@ -37,8 +39,8 @@ articles, contact form, metadata, and deployment workflow.
 - Responsive image generation through Astro's asset pipeline
 - Static deployment to GitHub Pages at `blog.afzalex.com`
 
-Comments and the newsletter UI are intentionally hidden until their backends
-are implemented.
+The newsletter UI remains intentionally hidden until a subscription backend is
+implemented.
 
 ## Technology
 

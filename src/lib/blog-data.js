@@ -4,7 +4,7 @@ import mohammadAfzalAvatar from "../assets/mohammad-afzal-profile.png";
 const siteUrl = (
   import.meta.env.SITE_URL ||
   import.meta.env.PUBLIC_SITE_URL ||
-  "https://quietpages-eta.vercel.app"
+  "https://blog.afzalex.com"
 ).replace(/\/$/, "");
 
 export const authors = [
@@ -117,6 +117,7 @@ export const formatDate = (iso) =>
 
 export const SITE = {
   name: "Afzal, In Plain Text",
+  author: "Mohammad Afzal",
   description:
     "Practical notes on software engineering, cloud infrastructure, automation, and building reliable systems.",
   url: siteUrl,

@@ -197,16 +197,20 @@ Do not change the Worker endpoint, Turnstile site key, expected action, sender,
 or recipient assumptions without explaining the coordinated external change
 the user must make.
 
-### Disabled features
+### External features
 
 - `src/components/Newsletter.astro` is deliberately wrapped in
   `class="hidden"` and has no real subscription backend.
-- The comments placeholder in `src/pages/blog/[slug].astro` is deliberately
-  hidden and has no authentication or persistence backend.
+- Article comments are provided by the self-hosted Remark42 service at
+  `https://comments.afzalex.com`, using the `afzal-blog` site ID and Google
+  authentication. The article template synchronizes the widget with the site
+  theme.
 
-Do not expose either feature merely by removing `hidden`. Implement and verify
+Do not expose the newsletter merely by removing `hidden`. Implement and verify
 a real backend, privacy behavior, error states, and abuse protection only when
-the user explicitly asks to enable the feature.
+the user explicitly asks to enable it. Do not change the Remark42 host, site
+ID, authentication, or moderation assumptions without explaining the required
+external service changes.
 
 ## Astro and JavaScript conventions
 
