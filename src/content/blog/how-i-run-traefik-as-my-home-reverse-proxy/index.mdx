@@ -1,0 +1,307 @@
+---
+title: "How I Run Traefik as My Home Reverse Proxy"
+excerpt: "How I use Traefik to route multiple Docker services through a single entry point at home, using file-based dynamic configuration and a shared Docker network."
+date: 2026-09-20
+readingTime: 12
+category: "engineering"
+tags: ["tools", "web", "process"]
+author: "mohammad-afzal"
+thumbnail: ./cover.jpg
+---
+
+When you run more than one service in Docker, you hit the same wall fairly quickly: two containers cannot both listen on port 80.
+
+The usual answer is a reverse proxy. It sits at the front, accepts all incoming connections, and forwards each request to the right container based on the hostname or path. I use Traefik for this. It has been running on my home server without incident for long enough that I barely think about it, which is the outcome I wanted.
+
+This article covers how I set it up from scratch — the static configuration, the dynamic routing files, a shared Docker network, and the middleware building blocks that most services reuse. I will use a generic hostname throughout. Substitute your own machine name where you see `myserver.local`.
+
+## Why Traefik
+
+The honest reason is that Traefik fits the way I think about Docker services.
+
+With Nginx or Caddy, adding a new service means editing a central configuration file and reloading the process. That is fine for a handful of services, but the friction accumulates. Traefik separates the two concerns. The static configuration — entrypoints, providers, logging — is written once and almost never touched. Routing for each service lives in small, independent YAML files that Traefik watches and reloads automatically without restarting.
+
+The other reason is that Traefik is Docker-native. If you prefer labels on your containers, it can discover routes from them automatically. I use file-based routing instead, which keeps service configuration self-contained and predictable.
+
+## The mental model
+
+Traefik routes a request through three stages:
+
+1. **Entrypoint** — the port the request arrives on (`80` for HTTP, `443` for HTTPS).
+2. **Router** — a rule that matches the request by hostname, path, or both, and selects a service.
+3. **Service** — the upstream server that receives the forwarded request.
+
+Between the router and the service, you can attach **middlewares**: reusable transformations such as HTTPS redirection, basic authentication, or path stripping. Most services in my setup share the same two or three middlewares from a common file.
+
+## The static configuration
+
+The static configuration lives in `traefik.yml`. It is loaded once when Traefik starts and requires a restart to change. Mine is deliberately small:
+
+```yaml
+# traefik.yml
+
+providers:
+  docker:
+    defaultRule: "Host(`{{ trimPrefix `/` .Name }}.docker.localhost`)"
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+api: {}
+
+entryPoints:
+  web:
+    address: :80
+  websecure:
+    address: :443
+    http:
+      tls: {}
+
+log:
+  level: INFO
+
+accessLog:
+  format: common
+```
+
+A few things worth noting:
+
+- **Two providers**: The Docker provider auto-discovers containers by name using the default rule. The file provider watches a directory and hot-reloads any YAML file that changes inside it. Both run simultaneously.
+- **`exposedByDefault`** defaults to `true`, meaning all containers are discovered automatically. If you prefer to opt in explicitly, add `exposedByDefault: false` under the Docker provider and add `traefik.enable=true` as a label on each container you want routed.
+- The **`websecure` entrypoint** has `tls: {}`, which enables TLS for all routers on that entrypoint by default. Individual routers can override this.
+- The **`api: {}`** block enables the dashboard and API. It is not exposed publicly here — that happens through a dynamic config file, which lets you put authentication in front of it.
+
+## The Docker network
+
+Every container that Traefik needs to reach must share a network with it. I create one named network and attach everything to it:
+
+```bash
+docker network create mynetwork
+```
+
+Traefik joins it at startup. Each service container joins it the same way. No container needs to publish its port to the host — Traefik reaches it directly through the shared network by container name.
+
+## Running Traefik
+
+I run Traefik with `docker run` rather than Docker Compose. The command is longer, but it makes every configuration decision explicit:
+
+```bash
+docker run --name traefik -d \
+  --restart unless-stopped \
+  --network mynetwork \
+  -p 80:80 \
+  -p 443:443 \
+  --add-host=host.docker.internal:host-gateway \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v ./traefik.yml:/etc/traefik/traefik.yml \
+  -v ./dynamic:/etc/traefik/dynamic \
+  -v ./certs:/etc/traefik/certs \
+  traefik:v3
+```
+
+What each flag does:
+
+| Flag | Purpose |
+|---|---|
+| `--network mynetwork` | Joins the shared network so it can reach other containers |
+| `-p 80:80 -p 443:443` | Publishes HTTP and HTTPS to the host |
+| `--add-host=host.docker.internal:host-gateway` | Lets Traefik reach services running directly on the host rather than in Docker |
+| `-v /var/run/docker.sock` | Allows the Docker provider to discover containers |
+| `-v ./traefik.yml` | The static configuration |
+| `-v ./dynamic` | The directory of hot-reloaded routing files |
+| `-v ./certs` | Local TLS certificates |
+
+The `./dynamic` directory is where the interesting work happens.
+
+## Shared middlewares
+
+Before adding any service, I create a `commons.yml` in the dynamic directory. It defines middlewares that most services will reference by name:
+
+```yaml
+# dynamic/commons.yml
+
+http:
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    basic-auth:
+      basicAuth:
+        users:
+          - "admin:$2y$05$..." # generated with: htpasswd -nbB admin 'yourpassword'
+
+    add-trailing-slash:
+      redirectRegex:
+        regex: "^(https?://[^/]+/[^/?#]+)([?#]?.*)$"
+        replacement: "${1}/${2}"
+        permanent: true
+
+    strip-first-segment:
+      stripPrefixRegex:
+        regex:
+          - "^/[^/]+"
+```
+
+Generate the bcrypt password hash with:
+
+```bash
+# Requires apache2-utils (apt) or httpd-tools (yum)
+htpasswd -nbB admin 'yourpassword'
+```
+
+The `add-trailing-slash` and `strip-first-segment` middlewares are used together for services exposed under a path prefix on `localhost`. They ensure the browser always reaches `/dashboard/` rather than `/dashboard`, and that the prefix is removed before the request hits the upstream service.
+
+These middlewares are named once and referenced by every router that needs them. Adding a new service that requires HTTPS redirect or basic authentication is a single line.
+
+## Adding a service
+
+Each service gets its own YAML file in the dynamic directory. Here is a concrete example using a comments service running at container name `comments-app` on port `8080`:
+
+```yaml
+# dynamic/comments.yml
+
+http:
+  routers:
+    comments-http:
+      rule: "Host(`comments.myserver.local`)"
+      entryPoints:
+        - web
+      service: comments-service
+      middlewares:
+        - redirect-to-https
+
+    comments-https:
+      rule: "Host(`comments.myserver.local`)"
+      entryPoints:
+        - websecure
+      service: comments-service
+      tls: {}
+
+  services:
+    comments-service:
+      loadBalancer:
+        servers:
+          - url: "http://comments-app:8080"
+```
+
+Two routers, one service. The HTTP router immediately redirects to HTTPS. The HTTPS router handles the real request and forwards it upstream. The container `comments-app` does not publish any port — Traefik reaches it through the shared Docker network by name.
+
+Drop this file into `./dynamic/` and Traefik picks it up within a second or two, no restart required.
+
+## Securing the dashboard
+
+The Traefik dashboard is useful for inspecting routers, services, and middlewares. I expose it on `localhost` under `/dashboard/` behind basic authentication, rather than publishing it on a hostname or opening it on port `8080`:
+
+```yaml
+# dynamic/dashboard.yml
+
+http:
+  routers:
+    dashboard-redirect:
+      rule: "Host(`localhost`) && Path(`/dashboard`)"
+      service: noop@internal
+      middlewares:
+        - add-trailing-slash
+        - strip-first-segment
+      priority: 10000
+
+    dashboard:
+      rule: "Host(`localhost`) && (PathPrefix(`/dashboard/`) || PathPrefix(`/api`))"
+      service: api@internal
+      middlewares:
+        - basic-auth
+```
+
+The `dashboard-redirect` router catches bare `/dashboard` and redirects it to `/dashboard/`, which Traefik's built-in service requires. The high priority ensures this router matches before any more-general rules. The `dashboard` router then handles everything under `/dashboard/` and `/api`, protected by the `basic-auth` middleware from `commons.yml`.
+
+`api@internal` and `noop@internal` are Traefik built-in services — no `services:` block needed.
+
+## Local TLS
+
+For local services, I use self-signed certificates. You can generate one with [mkcert](https://github.com/FiloSottile/mkcert), which installs a local CA your browser trusts automatically:
+
+```bash
+mkcert -install
+mkcert myserver.local "*.myserver.local"
+```
+
+Move the generated files to the `./certs` directory that Traefik mounts, then tell Traefik about them:
+
+```yaml
+# dynamic/ssl_certificates.yml
+
+tls:
+  certificates:
+    - certFile: "/etc/traefik/certs/myserver.local.pem"
+      keyFile: "/etc/traefik/certs/myserver.local-key.pem"
+
+  stores:
+    default:
+      defaultCertificate:
+        certFile: "/etc/traefik/certs/myserver.local.pem"
+        keyFile: "/etc/traefik/certs/myserver.local-key.pem"
+```
+
+Setting a `defaultCertificate` means any router using `tls: {}` will present this certificate, even if the hostname is not explicitly listed. For a home server with a handful of subdomains, a wildcard certificate covers everything.
+
+For services reachable from the internet, Let's Encrypt through Traefik's built-in ACME support is the right choice. The [official documentation](https://doc.traefik.io/traefik/https/acme/) covers the DNS and HTTP challenge options.
+
+## Routing to host services
+
+Occasionally I want Traefik to route traffic to something running directly on the host rather than in a container — for example, a local development server. The `--add-host=host.docker.internal:host-gateway` flag added to the `docker run` command makes this possible:
+
+```yaml
+# dynamic/devserver.yml
+
+http:
+  routers:
+    devserver:
+      rule: "Host(`dev.myserver.local`)"
+      service: devserver-service
+
+  services:
+    devserver-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:4321"
+```
+
+The container sees `host.docker.internal` as the host machine's gateway address. This is how I route a subdomain to the Astro development server running on port `4321` during local work on this blog.
+
+## The layout of the dynamic directory
+
+After setting up a few services, the dynamic directory looks like this:
+
+```
+dynamic/
+├── commons.yml          # shared middlewares
+├── ssl_certificates.yml # tls certificates
+├── dashboard.yml        # traefik dashboard
+├── comments.yml         # comments service
+├── files.yml            # file browser
+└── devserver.yml        # local dev server
+```
+
+Each file is independent. Adding a service is creating a new file. Removing one is deleting it. There is no central list to keep synchronized, and nothing restarts.
+
+## What I would change on a second pass
+
+The setup I described is largely what I run now, and it has been stable. If I were doing it again from scratch:
+
+- I would set `exposedByDefault: false` in the Docker provider from the start. Auto-discovery is convenient, but opt-in is safer — you know exactly which containers are reachable through Traefik.
+- I would put `commons.yml` in place before starting any other service. Routers that reference a middleware by name fail silently if that middleware does not exist yet.
+- I would keep the dynamic directory in version control from day one, excluding only the actual certificate files. The routing configs are small, readable, and worth tracking.
+
+## Quick start with a template setup
+
+If you want a working example to start from rather than building the files by hand, I maintain [fzdocker](https://github.com/afzalex/fzdocker) — a set of template configs and a run script that bootstraps this exact pattern. It comes with example dynamic configs for common services including the dashboard, file browser, and comments. The article you just read explains every decision inside it.
+
+## A router that stays out of the way
+
+The thing I like most about this setup is that Traefik disappears into the background once it is running. Services are added by dropping a file into a directory. They are removed by deleting it. Certificates are loaded without a restart. The dashboard gives a live view when something is not routing correctly.
+
+The reverse proxy is no longer something I configure. It is something I configure around.
+
+If you are already running self-hosted services on Docker, I wrote about [adding a comments system with Remark42](/blog/how-i-added-self-hosted-comments-to-my-static-blog) and [resolving local and remote hostnames with split DNS](/blog/running-split-dns-at-home-with-dnsmasq) — both of which assume Traefik is in place, and now it is.

@@ -10,52 +10,55 @@ thumbnail: ./cover.webp
 ---
 
 Running several services on one machine creates a surprisingly ordinary
-problem: the services may be organized, but their addresses are not.
+problem: the services stay organized, but their addresses do not.
 
-My Raspberry Pi hosts tools for notes, files, shell access, containers,
-documents, photographs, music, and monitoring. Each one has its own URL.
-Browser bookmarks helped for a while, but they did not tell me whether a
-service was reachable, and they did not give the server a clear front door.
+My Raspberry Pi runs tools for notes, files, shell access, containers,
+documents, photos, music, and monitoring. Each one sits behind its own URL,
+and for a while a folder of browser bookmarks was the only thing tying them
+together. That worked until I needed to know, at a glance, whether a service
+was actually up. A bookmark opens a page; it tells you nothing about what is
+on the other side of it, and it certainly does not give the server a front
+door.
 
-I wanted one page that answered two questions:
+I wanted one page that answered two questions before I clicked anything:
 
 1. What is running on this machine?
 2. Where do I open it?
 
-That became [fzlaunchpad](https://github.com/afzalex/fzlaunchpad), a small
-React and TypeScript dashboard driven by a YAML file. It runs as a static
-website, needs no application database, and is available as a ready-to-run
+That question turned into [fzlaunchpad](https://github.com/afzalex/fzlaunchpad),
+a small React and TypeScript dashboard driven by one YAML file. It runs as a
+static site, keeps no database of its own, and ships as a ready-to-run
 [Docker image](https://hub.docker.com/r/afzalex/fzlaunchpad).
 
 ![My fzlaunchpad dashboard on a Raspberry Pi, showing nine self-hosted services and their current states.](./fzlaunchpad-desktop.webp)
 
-## What I wanted from the dashboard
+## Keeping the dashboard itself out of the way
 
-I did not need another large platform to operate. The dashboard itself should
-have almost nothing to maintain.
+I did not want to introduce another thing to operate. Whatever I built needed
+to demand less attention than the bookmarks folder it was replacing, not more.
 
-My requirements were:
+So the dashboard had to:
 
-- load quickly on a Raspberry Pi and other low-power machines;
-- keep service definitions in a readable, versionable file;
-- show a clear name, description, icon, link, and current state for each
-  service;
-- adapt to desktop and mobile screens;
-- allow the visual theme to belong to the machine it represents;
-- run with one container and sit comfortably behind any reverse proxy.
+- load quickly on a Raspberry Pi and similarly modest hardware;
+- keep its service list in a plain, versionable file instead of a database;
+- show a name, description, icon, link, and live status for each service;
+- work the same on a phone as it does on a monitor;
+- let the theme belong to the machine it represents, not to the dashboard;
+- run as one container behind whatever reverse proxy is already in front of
+  it.
 
-This led to the most important design decision: fzlaunchpad is
-**static-first**. Vite builds the React application, and Caddy serves the
-compiled files from a small container. In the visitor's browser, the
-application loads `config.yaml`, renders the service cards, and runs any
-configured health checks.
+That pushed me toward a static-first design. Vite builds the React app, and
+Caddy serves the compiled files from a small container. Everything that looks
+dynamic — loading `config.yaml`, rendering the cards, running health
+checks — happens in the visitor's browser, not on a server I would have to
+maintain.
 
-There is no separate API for managing the dashboard. Updating it means editing
-the YAML file.
+There is no admin API. Changing the dashboard means editing the YAML file, the
+same way changing a `docker-compose.yml` means editing that file.
 
-## Start fzlaunchpad with Docker
+## Starting it with Docker
 
-The quickest way to see the default dashboard is:
+The fastest way to see it running is the default configuration:
 
 ```bash
 docker run -d \
@@ -65,21 +68,21 @@ docker run -d \
   afzalex/fzlaunchpad:latest
 ```
 
-It becomes available at:
+That puts it at:
 
 ```text
 http://localhost:8080
 ```
 
-For a real installation, I keep the configuration and background images
-outside the container:
+For an actual installation, I keep the configuration and background images
+outside the container, in a folder I can back up and version:
 
 ```bash
 mkdir -p fzlaunchpad/images
 cd fzlaunchpad
 ```
 
-After creating `config.yaml`, I mount both locations read-only:
+Once `config.yaml` exists, I mount both locations read-only:
 
 ```bash
 docker run -d \
@@ -91,17 +94,17 @@ docker run -d \
   afzalex/fzlaunchpad:latest
 ```
 
-The read-only mounts are deliberate. The container only needs to serve those
-files; it does not need permission to change them.
+Read-only is deliberate. The container only needs to serve those files, not
+modify them.
 
-The repository also publishes downloadable static builds and documents a
-Compose setup in its [current README](https://github.com/afzalex/fzlaunchpad#readme).
+The repository also has downloadable static builds and a Compose setup,
+documented in its [current README](https://github.com/afzalex/fzlaunchpad#readme).
 
-## Describe the dashboard in YAML
+## What actually goes in the YAML
 
-Here is a compact configuration with three services. The hostnames use
-`example.com`; replace them with addresses that are reachable from the
-browsers opening the dashboard.
+Here is a trimmed configuration with three services. I have swapped in
+`example.com` hostnames — replace them with whatever is reachable from the
+browsers that will open the dashboard.
 
 ```yaml
 server:
@@ -166,7 +169,7 @@ statusMapping:
   "500-599": "warning"
 ```
 
-The main parts have distinct jobs:
+Nothing here is exotic — five top-level sections, each doing one job:
 
 | Section         | What it controls                                                  |
 | --------------- | ----------------------------------------------------------------- |
@@ -176,102 +179,95 @@ The main parts have distinct jobs:
 | `theme`         | Background image, colours, cards, header, footer, and status dots |
 | `statusMapping` | The label shown for each HTTP status code or range                |
 
-The configuration is ordinary text, so I can keep it in Git, review a change,
-or reuse it as the starting point for another machine.
+Because it is plain text, I keep it in Git, review changes to it like any
+other config, and reuse it as a starting point when I set up a new machine.
 
 ![An example fzlaunchpad configuration rendered as a server header, three service cards, a custom background, and a footer.](./fzlaunchpad-example-config.webp)
 
-## A card is both a link and a small status view
+## A card is a link and a tiny status check
 
-Each service can define two addresses:
+Each service entry can define two addresses:
 
-- `url` is opened when the card is selected;
-- `healthCheckUrl` is requested periodically to determine the displayed
-  status.
+- `url` is what opens when you click the card;
+- `healthCheckUrl` is what gets polled to decide the status shown on it.
 
-They can be the same, but they do not have to be. A service might open its
-normal user interface while exposing a smaller `/health` endpoint for the
-check.
-
-The status label and dot come from the HTTP response. The configuration can
-map an individual code or a range, which is useful when a protected service
-returns a response such as `401` even though it is running correctly.
+Often they are the same address. Sometimes they are not — a service might show
+its normal interface at one path while exposing a lighter `/health` endpoint
+for checks. The label and dot colour come from the HTTP response, and the
+mapping can cover a single code or a whole range, which matters for something
+like an authenticated service that legitimately returns `401` while it is
+perfectly healthy.
 
 ![A fzlaunchpad service card for Portainer showing its icon, description, running status, link indicator, and green health dot.](./service-status-card.png)
 
-The health checks happen in the visitor's browser. That detail has two useful
-consequences:
+The checks run in the browser, not on a server, which has two consequences
+worth knowing before you rely on it:
 
-1. the dashboard reports whether the service is reachable from the reader's
-   current network;
-2. the target service's browser security rules can affect how much information
-   the check can read.
+1. the dashboard is telling you whether a service is reachable from wherever
+   you are currently sitting, not from some central vantage point;
+2. the target service's own CORS rules decide how much the check can actually
+   see.
 
-fzlaunchpad first attempts a normal CORS request. If the browser blocks access
-to the response, it tries a `no-cors` request. A successful opaque request can
-confirm basic reachability, but the browser cannot reveal its actual status
-code. The interface therefore treats that result as reachable rather than
-pretending it has complete monitoring data.
+fzlaunchpad tries a normal CORS request first. If the browser blocks it, it
+falls back to a `no-cors` request — that can confirm the service responded at
+all, but the browser will not hand over the real status code for an opaque
+response, so fzlaunchpad reports it as reachable rather than pretending to
+know more than it does.
 
-This makes the status indicator a convenient launchpad signal, not a
-historical monitoring or incident-alerting system. I still use dedicated
-monitoring tools when I need metrics, alerts, or evidence of what happened
-while nobody had the dashboard open.
+That is the honest scope of it: a convenient signal for "can I get to this
+right now," not a monitoring system. I still reach for dedicated monitoring
+when I need history, alerts, or evidence of what happened while the dashboard
+was not open.
 
-## Make the page belong to the machine
+## Letting the page look like it belongs to the machine
 
-A server dashboard is opened frequently, so small visual choices matter.
-fzlaunchpad lets the YAML configuration control:
+I open this dashboard several times a day, so I did not want it to look like a
+generic admin panel. The YAML file controls the colours for the page and
+cards, the header and footer, a background image with its own position, size,
+repeat mode, and opacity, and per-status colours down to individual HTTP codes
+if I want that level of control. Icons come from Font Awesome and Material
+Design through React Icons, so most services already have something sensible
+to use.
 
-- the page and card colours;
-- header and footer colours;
-- a background image, position, size, repeat mode, and opacity;
-- colours for exact HTTP codes or status-code ranges;
-- icons from Font Awesome and Material Design through React Icons.
+It also understands placeholders — `{hostname}`, `{year}`, `{date}`,
+`{origin}` — in names, descriptions, links, and footer text, so one
+configuration can adapt to wherever it is being loaded from without a
+rebuild.
 
-It also supports placeholders such as `{hostname}`, `{year}`, `{date}`, and
-`{origin}` in names, descriptions, links, and footer content. A configuration
-can therefore adapt to the address from which it is loaded without rebuilding
-the application.
+On my Raspberry Pi, the theme is a quiet botanical background with muted
+cards — restrained enough that the service names and their status are still
+the first thing I notice, not the background.
 
-The theme in my Raspberry Pi installation uses a quiet botanical background
-and muted cards. The design is restrained enough that the service names and
-states remain the useful part of the page.
+## It has to work from my phone too
 
-## Mobile-friendly design
-
-I did not want a separate mobile dashboard. The same cards collapse into a
-single-column layout, keeping their status, description, and link target.
+I did not want a separate mobile version to maintain, so the same cards just
+collapse into a single column, keeping their status, description, and link.
 
 ![A landscape composition of the fzlaunchpad mobile header and two service cards from its single-column layout.](./fzlaunchpad-mobile.png)
 
-That matters in practice. I often need the dashboard when I am not already
-sitting at a computer—for example, to open a service from my phone or quickly
-confirm that a machine is reachable.
+This matters more than I expected. Most of the time I need the dashboard, I am
+not at my desk — I am checking from my phone whether something is up, or just
+grabbing a link to a service I do not have bookmarked there.
 
-## Why this arrangement has stayed useful
+## Why I have kept using it
 
-fzlaunchpad does not try to discover every container automatically or become
-the control plane for the server. Its job is smaller:
+fzlaunchpad does not try to auto-discover every container or become a control
+plane for the server, and I think that is the reason it has stuck around
+instead of turning into another thing I maintain. It just collects the
+destinations that matter, makes clear what each one is, shows a reasonable
+guess at its current state, and stays easy enough to reconfigure that I am not
+afraid to touch it.
 
-- collect the important destinations;
-- make their purpose visible;
-- show a useful indication of their present state;
-- remain easy to replace, move, and configure.
+The server underneath keeps running exactly as it did before; fzlaunchpad just
+gives it a front page. That is a small enough job that the same setup works
+whether it is sitting in front of a Raspberry Pi, a NAS, a VPS, or a dev
+machine — the YAML file is what changes, not the application.
 
-The server continues running exactly as it did before. fzlaunchpad simply
-gives it a front page.
+The source and full configuration reference are on
+[GitHub](https://github.com/afzalex/fzlaunchpad), the image is on
+[Docker Hub](https://hub.docker.com/r/afzalex/fzlaunchpad), and I wrote an
+earlier [overview on LinkedIn](https://www.linkedin.com/pulse/fzlaunchpad-fast-configurable-launchpad-your-services-mohammad-afzal-e92rc/)
+when the project was newer.
 
-That boundary is why the project works well for my setup. A Raspberry Pi, NAS,
-VPS, development machine, or small office server can all use the same
-application, while the YAML file explains what belongs on that particular
-machine.
-
-The source and full configuration reference are available on
-[GitHub](https://github.com/afzalex/fzlaunchpad). The ready-made container is
-published on [Docker Hub](https://hub.docker.com/r/afzalex/fzlaunchpad), and I
-also wrote an earlier [overview on LinkedIn](https://www.linkedin.com/pulse/fzlaunchpad-fast-configurable-launchpad-your-services-mohammad-afzal-e92rc/).
-
-What began as a solution to scattered bookmarks is now the first page I open
-when I want to understand a server. One dashboard does not run all my
-self-hosted services; it makes all of them easier to find.
+What started as a fix for a messy bookmarks folder is now the first page I
+open when I want to know what is actually running on a server.
